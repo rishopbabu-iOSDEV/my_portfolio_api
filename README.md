@@ -18,9 +18,11 @@ A small REST API that serves a personal portfolio (profile, projects, skills, ex
 ```
 my_portfolio_api/
 ├── api/
-│   ├── main.py        # FastAPI app: routes and helper functions
+│   ├── main.py        # FastAPI app: routes, helpers, Swagger documentation
 │   └── db.py          # MySQL connection + query helper
-├── .env.example       # Template for your database settings
+├── .env.example       # Template for your database settings (safe to commit)
+├── .env               # YOUR real settings (you create it; git ignores it)
+├── .gitignore         # Files git must never track
 ├── requirements.txt   # Pinned Python dependencies
 └── README.md
 ```
@@ -62,7 +64,7 @@ DB_PASSWORD=your_mysql_password
 DB_NAME=future_portfolio_db
 ```
 
-> Never commit `.env`. It is already listed in `.gitignore`.
+> Never commit `.env`. It is already listed in `.gitignore` (see [Git and ignored files](#git-and-ignored-files)).
 
 **4. Run the server**
 
@@ -98,6 +100,22 @@ curl "http://127.0.0.1:8000/api/projects?skill=Python&limit=5"
 | GET | `/api/hello` | Health check, returns `{"message": "Hello, World!"}` |
 | GET | `/api/profile` | The portfolio owner's profile |
 | GET | `/api/projects` | Paginated list of projects with their skills |
+| GET | `/api/summary` | Professional summary |
+| GET | `/api/experience` | Work history (filter by `company`, paginated) |
+| GET | `/api/skills` | Skills with project counts (filter by `evidenced`, `category`) |
+| GET | `/api/education` | Education history (paginated) |
+| GET | `/api/resume` | Whole resume as one JSON document |
+
+### List endpoints share the same paging options
+
+`/api/projects`, `/api/experience`, `/api/skills` and `/api/education` all accept `page` (default 1) and `limit` (default 10, max 50) and return the total match count in the `X-Total-Count` header.
+
+| Endpoint | Extra filters |
+|----------|---------------|
+| `/api/projects` | `skill`, `company` |
+| `/api/experience` | `company` |
+| `/api/skills` | `evidenced` (true/false), `category` (`Company`, `Industry` or `Community`) |
+| `/api/education` | none |
 
 ### `GET /api/projects`
 
@@ -121,6 +139,12 @@ Client ──HTTP──▶ FastAPI route ──SQL──▶ MySQL view ──▶
 3. **Views** (`v_api_*`) are saved SELECT statements in the database. They give the API a stable shape, so the API code doesn't need to know how the underlying tables are joined.
 4. **`list_from_view`** is a shared helper that adds filtering, counting and pagination to any view.
 
+### How the code is documented
+
+Every function and keyword in `main.py` and `db.py` is explained in plain language using three questions: **What** does it do, **Why** is it there, **How** does it work. Read the files top to bottom like a lesson.
+
+The same text feeds **Swagger** (`/docs`): each route has a summary, description, documented responses, and every query parameter has help text and examples. Change the code's documentation and the API docs update by themselves.
+
 ### Views the code expects
 
 `v_api_profile`, `v_api_summary`, `v_api_experience`, `v_api_projects`, `v_api_skills`, `v_api_education`, `v_api_awards`
@@ -129,12 +153,34 @@ Client ──HTTP──▶ FastAPI route ──SQL──▶ MySQL view ──▶
 
 Look at `list_from_view` in `main.py`. The column and view names are fixed text written in the code, while every value from the user goes through `%s` placeholders in `params`. This is a **parameterized query**, and it is what stops SQL injection. Never build SQL by pasting user input into a string with f-strings.
 
+## Git and ignored files
+
+The `.gitignore` keeps junk and secrets out of the repository:
+
+| Ignored | Why |
+|---------|-----|
+| `.env`, `.env.*`, keys | Passwords and secrets must never reach GitHub (`.env.example` is the one exception: it is a safe template) |
+| `__pycache__/`, `*.pyc`, tool caches | Python regenerates these automatically; they differ on every computer |
+| `.venv/`, `venv/` | Each person creates their own virtual environment |
+| `build/`, `dist/`, `*.egg-info/` | Build output |
+| `.coverage`, `htmlcov/`, `.pytest_cache/` | Test artefacts |
+| `*.log`, `*.tmp`, `*.bak`, `*.swp` | Temporary files |
+| `.vscode/`, `.idea/` | Personal editor settings |
+| `.DS_Store`, `Thumbs.db` | Operating-system clutter |
+| `node_modules/` | In case a front end is added later |
+
+If a file was committed *before* being ignored, ignoring it is not enough. Stop tracking it with:
+
+```bash
+git rm -r --cached api/__pycache__
+```
+
 ## Exercises
 
-1. Add a `GET /api/summary` endpoint that returns the row from `v_api_summary`.
-2. Add `GET /api/education` and `GET /api/awards`.
+1. Add `GET /api/awards` (the view `v_api_awards` already exists; copy the pattern of `list_education`).
+2. Add a `category` filter to `/api/projects` using the `Category` type.
 3. Return a proper `404` when a filter matches nothing (`HTTPException` is already imported).
-4. Add a `GET /api/resume` route that returns the whole resume (a `build_resume` helper already exists in `main.py`).
+4. Add a `404` response to the Swagger docs of `/api/profile` using `responses={404: {...}}`.
 5. Add a `search` query parameter that matches text in the project name (use `LIKE %s`).
 6. Write a small Python script with `requests` that calls your API and prints each project name.
 
